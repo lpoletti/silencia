@@ -3,13 +3,17 @@ import ctypes
 import json
 import math
 import os
+import queue
 import sys
+import tempfile
 import threading
 import tkinter.font
 import webbrowser
 from ctypes import wintypes
 
 import customtkinter as ctk
+import pystray
+from PIL import Image, ImageDraw, ImageFont
 
 import engine
 
@@ -27,14 +31,26 @@ OFF = ("#E5E7EB", "#252932")
 OFF_HOVER = ("#D1D5DB", "#303643")
 ACCENT = "#22C55E"
 ACCENT_HOVER = "#16A34A"
+ICON_OFF = "#6B7280"  # cinza do ícone desligado (bandeja e barra de tarefas)
 ERROR = "#EF4444"
 WARN_BG = ("#FEF3C7", "#2A2414")
 WARN_TEXT = ("#92400E", "#FCD34D")
 ICON_POWER, ICON_REFRESH = "", ""  # glifos da Segoe Fluent Icons / MDL2 Assets
 
 
-def resource(name):
-    return os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))), name)
+def make_icon(color, size=256):
+    """Círculo colorido com o símbolo de liga/desliga: ícone da janela, da bandeja e do .exe."""
+    img = Image.new("RGBA", (size, size))
+    draw = ImageDraw.Draw(img)
+    draw.ellipse((size * 0.03, size * 0.03, size * 0.97, size * 0.97), fill=color)
+    for name in ("SegoeIcons.ttf", "segmdl2.ttf"):  # Windows 11 / Windows 10
+        try:
+            glyph = ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", name), round(size * 0.5))
+        except OSError:
+            continue
+        draw.text((size / 2, size / 2), ICON_POWER, font=glyph, fill="white", anchor="mm")
+        break
+    return img
 
 
 def font(size, weight="normal", display=False):
@@ -50,8 +66,20 @@ class App(ctk.CTk):
         super().__init__(fg_color=BG)
         self.title(APP)
         self.resizable(False, False)
-        if os.path.exists(resource("icon.ico")):
-            self.iconbitmap(resource("icon.ico"))
+        self.icon_files, self.tray_images = {}, {}
+        for on, color in ((True, ACCENT), (False, ICON_OFF)):
+            self.icon_files[on] = os.path.join(tempfile.gettempdir(), f"silencia_{'on' if on else 'off'}.ico")
+            make_icon(color).save(self.icon_files[on], sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (256, 256)])
+            self.tray_images[on] = make_icon(color, 64)
+        self._icon_on = None
+        self.closed = False
+        self._calls = queue.SimpleQueue()  # pedidos da bandeja (outra thread), executados no _tick, na thread da janela
+        self.tray = pystray.Icon(APP, self.tray_images[False], APP, menu=pystray.Menu(
+            pystray.MenuItem("Abrir Silencia", lambda: self._calls.put(self.show_window), default=True),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Sair", lambda: self._calls.put(self.on_close))))
+        self.tray.run_detached()
+        self.bind("<Unmap>", self._on_unmap)
         self.icons = next((f for f in ("Segoe Fluent Icons", "Segoe MDL2 Assets") if f in tkinter.font.families()), None)
         try:
             with open(CONFIG, encoding="utf-8") as f:
@@ -204,7 +232,14 @@ class App(ctk.CTk):
         on = bool(self.engine.streams)
         self.power.configure(fg_color=ACCENT if on else OFF, hover_color=ACCENT_HOVER if on else OFF_HOVER)
         self.power._canvas.itemconfig(self.glyph, fill="#FFFFFF" if on else "#8B93A1")
+        if on != self._icon_on:  # verde ligado, cinza desligado: janela, barra de tarefas e bandeja
+            self._icon_on = on
+            self.iconbitmap(self.icon_files[on])
+            self.tray.icon = self.tray_images[on]
+        self.tray.title = f"{APP}: {'ligado' if on else 'desligado'}"
         if error:
+            if self.state() == "withdrawn":  # escondido na bandeja: mostra a janela para o erro não passar batido
+                self.show_window()
             self.status.configure(text=error, text_color=ERROR)
         elif on:
             self.status.configure(text="Ativo: ruído sendo removido", text_color=ACCENT)
@@ -275,7 +310,20 @@ class App(ctk.CTk):
             os.startfile("ms-settings:sound")  # não deu automático: abre a tela de Som do Windows
         self.refresh_devices()
 
+    def _on_unmap(self, event):
+        if event.widget is self and self.state() == "iconic":
+            self.withdraw()  # sai da barra de tarefas; fica só o ícone nos itens ocultos da bandeja
+
+    def show_window(self):
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
     def _tick(self):
+        while not self._calls.empty():
+            self._calls.get()()
+        if self.closed:  # "Sair" da bandeja acabou de fechar a janela
+            return
         if self.engine.streams and not self.engine.running:  # aparelho desconectado no meio do uso
             self.engine.stop()
             self._update_status("O aparelho de áudio foi desconectado.")
@@ -293,6 +341,8 @@ class App(ctk.CTk):
     def on_close(self):
         self.engine.stop()
         self._save()
+        self.tray.stop()  # remove o ícone da bandeja (e encerra a thread dele)
+        self.closed = True
         self.destroy()
 
 

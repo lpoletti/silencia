@@ -2,6 +2,7 @@ sounddevice
 numpy
 customtkinter
 pyrnnoise  # só a rnnoise.dll que vem dentro dele é usada
+pystray
+pillow
 # para gerar o .exe
 pyinstaller
-pillow
