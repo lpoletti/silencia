@@ -18,6 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 import engine
 
 APP = "Silencia"
+HOTKEY = "Ctrl+Alt+M"
 CONFIG = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP, "config.json")
 
 # (tema claro, tema escuro): segue o tema do Windows
@@ -76,10 +77,14 @@ class App(ctk.CTk):
         self._calls = queue.SimpleQueue()  # pedidos da bandeja (outra thread), executados no _tick, na thread da janela
         self.tray = pystray.Icon(APP, self.tray_images[False], APP, menu=pystray.Menu(
             pystray.MenuItem("Abrir Silencia", lambda: self._calls.put(self.show_window), default=True),
+            pystray.MenuItem(f"Ligar\t{HOTKEY}", lambda: self._calls.put(self.start), enabled=lambda item: not self.engine.streams),
+            pystray.MenuItem(f"Desligar\t{HOTKEY}", lambda: self._calls.put(self.stop), enabled=lambda item: bool(self.engine.streams)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Sair", lambda: self._calls.put(self.on_close))))
         self.tray.run_detached()
         self.bind("<Unmap>", self._on_unmap)
+        self.hotkey_thread = None
+        threading.Thread(target=self._hotkey_loop, daemon=True).start()
         self.icons = next((f for f in ("Segoe Fluent Icons", "Segoe MDL2 Assets") if f in tkinter.font.families()), None)
         try:
             with open(CONFIG, encoding="utf-8") as f:
@@ -159,8 +164,9 @@ class App(ctk.CTk):
         self.banner_btn.pack(side="right")
         self.banner_text = ctk.CTkLabel(self.banner, font=font(12), text_color=WARN_TEXT, wraplength=360, justify="left")
         self.banner_text.pack(anchor="w", padx=16, pady=(2, 10))
-        self.bottom = ctk.CTkFrame(self, fg_color="transparent", height=8)  # margem inferior
-        self.bottom.pack()
+        self.bottom = ctk.CTkLabel(self, text=f"{HOTKEY} liga e desliga de qualquer lugar · minimizar manda para a bandeja",
+                                   font=font(11), text_color=MUTED)
+        self.bottom.pack(pady=(0, 10))
 
     def _card(self):
         card = ctk.CTkFrame(self, fg_color=CARD, corner_radius=14, border_width=1, border_color=BORDER)
@@ -212,10 +218,25 @@ class App(ctk.CTk):
 
     def toggle(self):
         if self.engine.streams:
-            self.engine.stop()
-            self._update_status()
+            self.stop()
         else:
             self.start()
+
+    def stop(self):
+        self.engine.stop()
+        self._update_status()
+
+    def _hotkey_loop(self):
+        user32 = ctypes.windll.user32
+        self.hotkey_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+        # 0x4003 = Ctrl + Alt, sem repetir enquanto segura a tecla; vale em qualquer programa
+        if not user32.RegisterHotKey(None, 1, 0x4003, ord(HOTKEY[-1])):
+            return self._calls.put(lambda: self.bottom.configure(
+                text=f"O atalho {HOTKEY} já é usado por outro programa; use a bandeja ou a janela.", text_color=ERROR))
+        msg = wintypes.MSG()
+        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            if msg.message == 0x0312:  # WM_HOTKEY
+                self._calls.put(self.toggle)
 
     def start(self):
         in_name, out_name = self.in_menu.get(), self.out_menu.get()
@@ -237,6 +258,7 @@ class App(ctk.CTk):
             self.iconbitmap(self.icon_files[on])
             self.tray.icon = self.tray_images[on]
         self.tray.title = f"{APP}: {'ligado' if on else 'desligado'}"
+        self.tray.update_menu()  # Ligar/Desligar habilitados conforme o estado
         if error:
             if self.state() == "withdrawn":  # escondido na bandeja: mostra a janela para o erro não passar batido
                 self.show_window()
