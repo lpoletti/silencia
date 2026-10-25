@@ -11,6 +11,8 @@
 ## Recursos
 
 - **Um botão só**: clique no botão redondo (ou aperte **Espaço**) para ligar e desligar o filtro.
+- **Fica na bandeja**: minimize e o Silencia sai da barra de tarefas e vai para os ícones ocultos, perto do relógio. O ícone fica **verde ligado** e **cinza desligado**.
+- **Atalho global Ctrl+Alt+M**: liga e desliga de qualquer programa, mesmo com o app escondido.
 - **Supressão de ruído por IA**: RNNoise, a mesma rede neural do NoiseTorch, roda localmente; nada sai do seu PC.
 - **Limiar de voz**: abaixo do nível escolhido o microfone fica mudo. Bom para teclado e ruídos curtos.
 - **Instala o microfone virtual com um clique** e percebe sozinho quando a instalação termina.
@@ -26,11 +28,14 @@
 3. Escolha seu **Microfone** e clique no botão redondo. Verde = filtrando.
 4. No app da chamada, escolha **CABLE Output** como microfone.
 
-Pronto. Deixe o Silencia aberto (pode minimizar) enquanto estiver na chamada.
+Pronto. Minimize o Silencia: ele fica nos ícones ocultos da bandeja (a setinha **^** ao lado do relógio) enquanto você está na chamada.
 
 | Controle | O que faz |
 |---|---|
-| Botão redondo / Espaço | Liga e desliga o filtro |
+| Botão redondo / Espaço | Liga e desliga o filtro (com a janela aberta) |
+| **Ctrl+Alt+M** | Liga e desliga de qualquer programa, mesmo com o Silencia escondido |
+| Ícone na bandeja | Verde = filtrando, cinza = desligado. Clique para abrir; botão direito para **Ligar**, **Desligar** ou **Sair** |
+| Minimizar | Esconde a janela na bandeja (fechar no **X** encerra o app) |
 | Microfone | Seu microfone de verdade (com ruído) |
 | Saída | Para onde vai o som limpo: o **CABLE Input**. Para se ouvir e testar, escolha seus fones |
 | Limiar de voz | Abaixo deste nível de voz o microfone fica mudo. Em 0% ele só tira o ruído de fundo |
@@ -66,6 +71,12 @@ Confira se o Silencia está verde e se o app da chamada está com **CABLE Output
 **Minha voz está cortando.**
 Baixe o **Limiar de voz**. Em 0% o microfone nunca fica mudo e só o ruído de fundo é removido.
 
+**O Ctrl+Alt+M não funciona.**
+Outro programa já usa esse atalho; o rodapé da janela avisa quando isso acontece. Use o menu do ícone na bandeja.
+
+**Quero o ícone sempre visível, fora dos ocultos.**
+Arraste o ícone da área oculta (setinha **^**) para a barra de tarefas, ou ative o Silencia em **Configurações → Personalização → Barra de tarefas → Outros ícones da bandeja do sistema**.
+
 ## Para desenvolvedores
 
 Requer Windows 10/11 e Python 3.12.
@@ -81,7 +92,7 @@ python -m venv .venv
 | Arquivo | O que tem |
 |---|---|
 | `engine.py` | Captura e reprodução (WASAPI), RNNoise + limiar de voz, fila entre os aparelhos, instalação do VB-CABLE e correção da saída padrão do Windows |
-| `silencia.py` | Interface (CustomTkinter) |
+| `silencia.py` | Interface (CustomTkinter), ícone na bandeja e atalho global |
 | `test_engine.py` | Autoteste: chiado, voz real com ruído, fila entre aparelhos |
 | `build.py` | Gera o ícone e o `.exe` com PyInstaller |
 
@@ -89,5 +100,6 @@ python -m venv .venv
 
 - [RNNoise](https://github.com/xiph/rnnoise) (BSD-3-Clause), a rede neural de supressão de ruído, via a `rnnoise.dll` do [pyrnnoise](https://github.com/pengzhendong/pyrnnoise) (Apache-2.0)
 - [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) (MIT), [python-sounddevice](https://github.com/spatialaudio/python-sounddevice) e PortAudio (MIT), NumPy (BSD)
+- [pystray](https://github.com/moses-palmer/pystray) (LGPL-3.0), o ícone da bandeja, e [Pillow](https://github.com/python-pillow/Pillow) (MIT-CMU)
 - [VB-CABLE](https://vb-audio.com/Cable/) (VB-Audio, donationware), baixado do site oficial na hora da instalação; não vem junto com o Silencia
 - Ideia e comportamento inspirados no [NoiseTorch](https://github.com/noisetorch/NoiseTorch); nenhum código dele foi usado
