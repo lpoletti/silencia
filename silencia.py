@@ -81,10 +81,8 @@ class App(ctk.CTk):
             pystray.MenuItem(f"Desligar\t{HOTKEY}", lambda: self._calls.put(self.stop), enabled=lambda item: bool(self.engine.streams)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Sair", lambda: self._calls.put(self.on_close))))
-        self.tray.run_detached()
         self.bind("<Unmap>", self._on_unmap)
         self.hotkey_thread = None
-        threading.Thread(target=self._hotkey_loop, daemon=True).start()
         self.icons = next((f for f in ("Segoe Fluent Icons", "Segoe MDL2 Assets") if f in tkinter.font.families()), None)
         try:
             with open(CONFIG, encoding="utf-8") as f:
@@ -106,6 +104,9 @@ class App(ctk.CTk):
         self.bind("<space>", lambda e: self.toggle())
         if "--ativar" in sys.argv:  # como o "-i" do NoiseTorch: já abre filtrando (útil em atalhos)
             self.start()
+        # Só agora: as threads da bandeja e do atalho leem self.engine e os widgets.
+        self.tray.run_detached()
+        threading.Thread(target=self._hotkey_loop, daemon=True).start()
         self._tick()
 
     def _build(self):
